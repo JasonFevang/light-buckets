@@ -18,7 +18,7 @@ const int echoPin = 32;
 const int accel_scl = 19; // These are unused, they are the defaults in arduino Wire library
 const int accel_sda = 21;
 
-const int post_action_delay = 200;
+const int post_action_delay = 900;
 const int accelerometer_period = 250;
 
 float duration;
@@ -38,7 +38,7 @@ void setup() {
 }
 
 int64_t miss_start = 0;
-int64_t miss_timeout = 600*1000;
+int64_t miss_timeout = 1000*1000;
 bool potential_miss = false;
 
 void loop() {
@@ -105,19 +105,21 @@ void on_target_detect_tsk(void *arg){
     bool yTrig = abs(accel.YAxis - prevAccel.YAxis) > yThresh;
     bool zTrig = abs(accel.ZAxis - prevAccel.ZAxis) > zThresh;
 
-    if(xTrig){
-      Serial.print("x");
-    }
-    if(yTrig){
-      Serial.print("y");
-    }
-    if(zTrig){
-      Serial.print("z");
-    }
-
-    if(xTrig || yTrig || zTrig){
-      Serial.println(" -trig");
-      on_target = true;
+    if(!on_target){
+      if(xTrig){
+        Serial.print("x");
+      }
+      if(yTrig){
+        Serial.print("y");
+      }
+      if(zTrig){
+        Serial.print("z");
+      }
+  
+      if(xTrig || yTrig || zTrig){
+        Serial.println(" -trig");
+        on_target = true;
+      }
     }
 
     prevAccel.XAxis = accel.XAxis;
