@@ -30,6 +30,11 @@ void setup() {
 
   xTaskCreate(bucket_detect_tsk, "bucket", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr);
   xTaskCreate(on_target_detect_tsk, "ontarget", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr);
+
+  // Give time for sensors to send through inital data before executing control logic
+  delay(500);
+  bucket = false;
+  on_target = false;
 }
 
 int64_t miss_start = 0;
@@ -38,21 +43,24 @@ bool potential_miss = false;
 
 void loop() {
   if(bucket){
-    Serial.println("Flash green!");
     bucket = false;
     potential_miss = false;
+    on_target = false;
+    Serial.println("Flash green!");
   }
 
-  if(on_target){
+  if(!potential_miss && on_target){
     potential_miss = true;
     miss_start = esp_timer_get_time();
-    on_target = false;
   }
 
   if(potential_miss && esp_timer_get_time() - miss_start > miss_timeout){
     Serial.println("Flash red!");
+    potential_miss = false;
     on_target = false;
   }
+
+  delay(10);
 }
 
 // Detects buckets using ultrasonic sensor
@@ -71,10 +79,13 @@ void bucket_detect_tsk(void *arg){
     //distance = (duration*.0343)/2;
 
     if(duration > 0 && duration < 1000){
-      Serial.print("BUCKET! ");
+      Serial.print("bucket detect");
       Serial.println(duration);
+      bucket = true;
       delay(post_action_delay);
     }
+
+    delay(1);
   }
   vTaskDelete(nullptr);
 }
@@ -82,7 +93,11 @@ void bucket_detect_tsk(void *arg){
 // Detects shots on target using accelerometer(MPU5060)
 void on_target_detect_tsk(void *arg){
   Vector prevAccel;
-
+  if(!mpu.begin(MPU6050_SCALE_2000DPS, MPU6050_RANGE_2G)){
+    Serial.println("Could not find a valid MPU6050 sensor, check wiring!");
+    vTaskDelete(nullptr);
+  }
+  
   for(;;){
     Vector accel = mpu.readNormalizeAccel();
 
@@ -103,7 +118,6 @@ void on_target_detect_tsk(void *arg){
     if(xTrig || yTrig || zTrig){
       Serial.println(" -trig");
       on_target = true;
-      delay(post_action_delay);
     }
 
     prevAccel.XAxis = accel.XAxis;
