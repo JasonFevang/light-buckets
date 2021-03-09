@@ -1,5 +1,12 @@
 #include <Wire.h>
 #include <MPU6050.h>
+#include <Adafruit_NeoPixel.h>
+
+#define LED_PIN    14
+#define LED_COUNT 60
+
+// Pixel controller
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Accelerometer interface class
 MPU6050 mpu;
@@ -14,7 +21,7 @@ const int zThresh = 2;
 
 // Pins for HC-SR04 ultrasonic sensor
 const int trigPin = 33;
-const int echoPin = 32;
+const int echoPin = 25;
 const int accel_scl = 19; // These are unused, they are the defaults in arduino Wire library
 const int accel_sda = 21;
 
@@ -27,7 +34,11 @@ int count = 0;
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-
+  
+  strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
+  strip.show();            // Turn OFF all pixels ASAP
+  strip.setBrightness(255); // Set BRIGHTNESS to about 1/5 (max = 255)
+  
   xTaskCreate(bucket_detect_tsk, "bucket", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr);
   xTaskCreate(on_target_detect_tsk, "ontarget", 4096, nullptr, tskIDLE_PRIORITY + 1, nullptr);
 
@@ -38,17 +49,28 @@ void setup() {
 }
 
 int64_t miss_start = 0;
-int64_t miss_timeout = 1000*1000;
+int64_t miss_timeout = 600*1000;
 bool potential_miss = false;
 
 void loop() {
   if(bucket){
     bucket = false;
     potential_miss = false;
-    on_target = false;
     Serial.println("Flash green!");
+    for(int i = 0; i < 3; i++){
+      strip.fill(0x00ff00, 0, strip.numPixels());
+      strip.show();
+      delay(200);
+      strip.fill(0, 0, strip.numPixels());
+      strip.show();
+      delay(200);
+    }
+    delay(1000);
+    on_target = false;
+    potential_miss = false;
   }
 
+  // on_target is controlled by the accelerometer task
   if(!potential_miss && on_target){
     potential_miss = true;
     miss_start = esp_timer_get_time();
@@ -56,6 +78,11 @@ void loop() {
 
   if(potential_miss && esp_timer_get_time() - miss_start > miss_timeout){
     Serial.println("Flash red!");
+    strip.fill(0xff0000, 0, strip.numPixels());
+    strip.show();
+    delay(300);
+    strip.fill(0, 0, strip.numPixels());
+    strip.show();
     potential_miss = false;
     on_target = false;
   }
@@ -76,15 +103,16 @@ void bucket_detect_tsk(void *arg){
     digitalWrite(trigPin, LOW);
 
     duration = pulseIn(echoPin, HIGH);
+    //Serial.println(duration);
     //distance = (duration*.0343)/2;
 
-    if(duration > 0 && duration < 1000){
+    if(duration > 0 && duration < 400){
       Serial.print("bucket detect");
       Serial.println(duration);
       bucket = true;
       delay(post_action_delay);
     }
-
+    
     delay(1);
   }
   vTaskDelete(nullptr);
